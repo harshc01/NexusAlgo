@@ -2,6 +2,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 import logging
 from engine.data_feeder import BinanceFeeder
 from engine.executor import NexusExecutor
@@ -33,12 +34,21 @@ async def lifespan(app: FastAPI): #to run indefinitely
     """This function runs when the server starts and stops"""
     # STARTUP
     logger.info("Starting NexusAlgo Engine.🚀.")
+    
+    # Debug: Check if env vars are actually present in the container
+    import os
+    url = os.getenv("SUPABASE_URL")
+    if not url:
+        logger.error(" missing env")
+    else:
+        logger.info(f" SB URL detected: {url[:15]}...")
+
     # create task in background
     engine_task = asyncio.create_task(executor.start(interval_seconds=60))
     
     yield # server running, accepting requests
     
-    # SHUTDOWN (ctrl+c)
+    # SHUTDOWN (ctrl+c or Railway Redeploy)
     logger.info("Shutdown signal received. Stopping engine.🥀.")
     executor.stop()
     
@@ -49,23 +59,36 @@ async def lifespan(app: FastAPI): #to run indefinitely
         logger.warning("Engine task forced to cancel.")
         
     # Final Metrics
-    final_value = broker.get_portfolio_value(strategy.fast_ema or 0)
+    current_price = strategy.fast_ema if strategy.fast_ema else 0
+    final_value = broker.get_portfolio_value(current_price)
     net_profit = final_value - broker.initial_capital
     
     logger.info(f"Final Portfolio Value: ${final_value:.2f} | Net Profit: ${net_profit:.2f}")
     
-    await db.save_backtest_result(
-        strategy_name=strategy.name,
-        net_profit=net_profit,
-        sharpe_ratio=1.25, 
-        max_drawdown=5.0
-    )
-    logger.info("Backtest results saved to Supabase.")
-#
+    try:
+        await db.save_backtest_result(
+            strategy_name=strategy.name,
+            net_profit=net_profit,
+            sharpe_ratio=1.25, 
+            max_drawdown=5.0
+        )
+        logger.info(" Backtest results saved to Supabase.")
+    except Exception as e:
+        logger.error(f"Failed to sync final metrics: {e}")
+
+# API init
 app = FastAPI(
     title="NexusAlgo Core Engine",
     version="1.0.0",
     lifespan=lifespan
+)
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Allow all origins for development
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 @app.get("/")
@@ -78,3 +101,12 @@ async def get_latest_quote(symbol: str):
     if not candle:
         raise HTTPException(status_code=404, detail="Data unavailable")
     return candle
+
+@app.get("/api/v1/broker/stats")
+async def get_broker_stats():
+    """Endpoint to feed the Next.js Vault UI with live portfolio stats"""
+    return {
+        "balance": broker.current_capital,
+        "holdings": broker.holdings,
+        "total_trades": broker.total_trades
+    }
