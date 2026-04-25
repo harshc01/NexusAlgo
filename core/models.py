@@ -6,14 +6,14 @@ class MarketCandle(BaseModel):
     """Standardized OHLCV data model for all feed sources."""
     model_config = ConfigDict(populate_by_name=True)
 
-    symbol: str = Field(..., description="The ticker symbol (e.g., BTCUSD, INFY, NVDA)")
+    symbol: str = Field(..., description="ENTER SYMBOL (e.g., BTCUSD, INFY, NVDA)")
     timestamp: datetime
     open_price: float = Field(..., gt=0)
     high_price: float = Field(..., gt=0)
     low_price: float = Field(..., gt=0)
     close_price: float = Field(..., gt=0)
     volume: float = Field(default=0.0, ge=0)
-    source: Literal["YFINANCE", "ALPACA", "FYERS"] = "YFINANCE"
+    source: Literal["YFINANCE", "ALPACA", "FYERS", "BINANCE"] = "YFINANCE" #add FYERS later
 
 class BacktestResult(BaseModel):
     """Model for sending backtest metrics to the Next.js Vault UI."""

@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     SUPABASE_URL: str = "your-project-url"
     SUPABASE_KEY: str = "your-anon-key"
     
-    # Engine Settings
+    # Engine Settings(can change default symbol from here)
     DEFAULT_SYMBOL: str = "BTC-USD"
     
     model_config = SettingsConfigDict(env_file=".env")

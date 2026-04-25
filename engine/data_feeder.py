@@ -1,9 +1,11 @@
-import yfinance as yf
-from datetime import datetime, timedelta
+import requests
 import asyncio
+from datetime import datetime, timedelta
 from abc import ABC, abstractmethod
 from core.models import MarketCandle
 import logging
+import os
+from fyers_apiv3 import fyersModel #im not 18 rn so i can't get fyers API rn, sorry <_>
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("NexusEngine")
@@ -14,36 +16,57 @@ class BaseFeeder(ABC):
     async def fetch_latest(self, symbol: str) -> MarketCandle | None:
         pass
 
-class YFinanceFeeder(BaseFeeder):
-    """Fallback feeder for historical backtesting."""
-    
-    async def fetch_latest(self, symbol: str, interval: str = '1m', lookback_minutes: int = 3) -> MarketCandle | None:
+class BinanceFeeder(BaseFeeder):
+    """High-speed crypto feeder. Active default for testing."""
+    async def fetch_latest(self, symbol: str, interval: str = '1m') -> MarketCandle | None:
+        binance_symbol = symbol.replace("-USD", "USDT").upper()
+        url = f"https://api.binance.com/api/v3/klines?symbol={binance_symbol}&interval={interval}&limit=1"
         try:
-            # wrap yfinance call in asyncio to prevent blocking the FastAPI event loop
-            end_time = datetime.now()
-            start_time = end_time - timedelta(minutes=lookback_minutes)
-            
-            stock = yf.Ticker(symbol)
-            df = await asyncio.to_thread(
-                stock.history, interval=interval, start=start_time, end=end_time
-            )
-
-            if df.empty:
-                logger.warning(f"No data found for symbol: {symbol}")
-                return None
-
-            latest = df.iloc[-1]
+            response = await asyncio.to_thread(requests.get, url)
+            data = response.json()
+            if not data or isinstance(data, dict): return None
+            latest = data[0]
             return MarketCandle(
                 symbol=symbol,
-                timestamp=latest.name.to_pydatetime(),
-                open_price=float(latest['Open']),
-                high_price=float(latest['High']),
-                low_price=float(latest['Low']),
-                close_price=float(latest['Close']),
-                volume=float(latest['Volume']),
-                source="YFINANCE"
+                timestamp=datetime.fromtimestamp(latest[0] / 1000.0),
+                open_price=float(latest[1]),
+                high_price=float(latest[2]),
+                low_price=float(latest[3]),
+                close_price=float(latest[4]),
+                volume=float(latest[5]),
+                source="BINANCE"
+            )
+        except Exception as e:
+            logger.error(f"Binance Feeder Error: {e}")
+            return None
+
+class FyersFeeder(BaseFeeder): #i'll have to add Fyers API in .env later
+    """Official Fyers API adapter."""
+    def __init__(self):
+        client_id = os.getenv("FYERS_CLIENT_ID", "DUMMY_ID")
+        access_token = os.getenv("FYERS_ACCESS_TOKEN", "DUMMY_TOKEN")
+        self.fyers = fyersModel.FyersModel(client_id=client_id, token=access_token, is_async=False, log_path="")
+
+    async def fetch_latest(self, symbol: str, interval: str = '1') -> MarketCandle | None:
+        fyers_symbol = symbol if symbol.startswith("NSE:") else f"NSE:{symbol}-EQ"
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=2) 
+        
+        data = {
+            "symbol": fyers_symbol, "resolution": interval, "date_format": "0",
+            "range_from": int(start_date.timestamp()), "range_to": int(end_date.timestamp()), "cont_flag": "1"
+        }
+        try:
+            response = await asyncio.to_thread(self.fyers.history, data=data)
+            if response.get("s") != "ok" or not response.get("candles"): return None
+            latest = response["candles"][-1]
+            return MarketCandle(
+                symbol=symbol, timestamp=datetime.fromtimestamp(latest[0]),
+                open_price=float(latest[1]), high_price=float(latest[2]),
+                low_price=float(latest[3]), close_price=float(latest[4]),
+                volume=float(latest[5]), source="FYERS"
             )
 
         except Exception as e:
-            logger.error(f"Feeder Error for {symbol}: {e}")
+            logger.error(f"Fyers Feeder Error: {e}")
             return None

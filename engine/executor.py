@@ -22,14 +22,14 @@ class NexusExecutor:
         
         while self.is_running:
             for strategy in self.strategies:
-                # 1. Fetch latest data
+                #Fetch latest data
                 candle = await self.feeder.fetch_latest(strategy.symbol)
                 
                 if candle:
-                    # 2. Feed the data to the strategy
+                    #Feed data to the strategy
                     await strategy.on_candle(candle)
                     
-                    # 3. Persistent storage in Supabase for the 'Dashboard' UI
+                    #Storage in Supabase for the 'Dashboard' UI simultaneously. 
                     await db.save_candle(candle)
             
             await asyncio.sleep(interval_seconds)

@@ -5,3 +5,4 @@ pydantic-settings==2.2.1
 supabase==2.4.1
 yfinance==0.2.37
 pandas==2.2.1
+#fyers later
