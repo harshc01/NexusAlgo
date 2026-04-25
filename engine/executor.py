@@ -1,8 +1,11 @@
 import asyncio
+import logging
 from typing import List
 from core.strategy import BaseStrategy
 from engine.data_feeder import BaseFeeder
 from core.database import db
+
+logger = logging.getLogger("NexusExecutor")
 
 class NexusExecutor:
     """The engine that pumps data into your strategies and saves the heartbeat."""
@@ -18,19 +21,25 @@ class NexusExecutor:
     async def start(self, interval_seconds: int = 60):
         """Main loop that drives the entire NexusAlgo ecosystem."""
         self.is_running = True
-        print(f"Nexus Engine: Starting execution for {len(self.strategies)} strategies.")
+        logger.info(f"Nexus Engine: Starting execution for {len(self.strategies)} strategies.")
         
         while self.is_running:
-            for strategy in self.strategies:
-                #Fetch latest data
-                candle = await self.feeder.fetch_latest(strategy.symbol)
-                
-                if candle:
-                    #Feed data to the strategy
-                    await strategy.on_candle(candle)
+            logger.info("Nexus Engine: Running iteration for all strategies.")
+            try:
+                for strategy in self.strategies:
+                    #Fetch latest data
+                    candle = await self.feeder.fetch_latest(strategy.symbol)
                     
-                    #Storage in Supabase for the 'Dashboard' UI simultaneously. 
-                    await db.save_candle(candle)
+                    if candle:
+                        #Feed data to the strategy
+                        await strategy.on_candle(candle)
+                        
+                        #Storage in Supabase for the 'Dashboard' UI simultaneously. 
+                        await db.save_candle(candle)
+                    else:
+                        logger.warning(f"Nexus Engine: No candle data returned for symbol '{strategy.symbol}'.")
+            except Exception as e:
+                logger.error(f"Nexus Engine: Unhandled exception in main loop: {e}", exc_info=True)
             
             await asyncio.sleep(interval_seconds)
 

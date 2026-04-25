@@ -17,9 +17,10 @@ class NexusDB:
             data['timestamp'] = data['timestamp'].isoformat()
             
             response = self.client.table("market_data").upsert(data).execute()
+            logger.info(f"Candle saved to Supabase for symbol '{candle.symbol}' at {data['timestamp']}.")
             return response
         except Exception as e:
-            logger.error(f"Database Error: {e}")
+            logger.error(f"Database Error saving candle for '{candle.symbol}': {e}", exc_info=True)
             return None
 
     async def save_backtest_result(self, strategy_name: str, net_profit: float, sharpe_ratio: float, max_drawdown: float):
