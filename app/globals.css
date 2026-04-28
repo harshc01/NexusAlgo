@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #050505;
+  color: #E5E7EB;
+}
+
+@layer utilities {
+  .bg-card {
+    background-color: #0D0D0D;
+    border: 1px solid #1A1A1A;
+  }
+  .text-emerald {
+    color: #10B981;
+  }
+  .text-rose {
+    color: #F43F5E;
+  }
+}
